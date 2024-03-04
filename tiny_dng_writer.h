@@ -33,6 +33,10 @@ THE SOFTWARE.
 #include <vector>
 #include <cstring>
 
+namespace MultiEngine {
+	class Sink;
+}
+
 namespace tinydngwriter {
 
 typedef enum {
@@ -256,9 +260,11 @@ class DNGImage {
   size_t GetStripOffset() const { return data_strip_offset_; }
   size_t GetStripBytes() const { return data_strip_bytes_; }
 
+  /// Extension:
   /// Write aux IFD data and strip image data to stream.
-  bool WriteDataToStream(std::ostream *ofs) const;
+  bool WriteDataToStream(const MultiEngine::Sink* sink) const;
 
+  /// Extension:
   ///
   /// Write IFD to stream.
   ///
@@ -268,7 +274,8 @@ class DNGImage {
   /// TODO(syoyo): Support multiple strips
   ///
   bool WriteIFDToStream(const unsigned int data_base_offset,
-                        const unsigned int strip_offset, std::ostream *ofs) const;
+                        const unsigned int strip_offset,
+                        const MultiEngine::Sink *sink) const;
 
   std::string Error() const { return err_; }
 
@@ -311,6 +318,12 @@ class DNGWriter {
   /// Returns true upon success.
   bool WriteToFile(const char *filename, std::string *err) const;
 
+  /// Extension:
+  /// Write DNG to a stream.
+  /// Return error string to `err` when Write() returns false.
+  /// Returns true upon success.
+  bool WriteToFile(const MultiEngine::Sink* sink, std::string *err) const;
+
  private:
   bool swap_endian_;
   bool dng_big_endian_;  // Endianness of DNG file.
@@ -351,6 +364,9 @@ class DNGWriter {
 #endif
 #endif
 
+
+
+#include <MultiEngine/io/sink/FileSink.h>
 
 namespace tinydngwriter {
 
@@ -2314,7 +2330,7 @@ static bool IFDComparator(const IFDTag &a, const IFDTag &b) {
   return (a.tag < b.tag);
 }
 
-bool DNGImage::WriteDataToStream(std::ostream *ofs) const {
+bool DNGImage::WriteDataToStream(const MultiEngine::Sink *sink) const {
   if ((data_os_.str().length() == 0)) {
     err_ += "Empty IFD data and image data.\n";
     return false;
@@ -2378,7 +2394,7 @@ bool DNGImage::WriteDataToStream(std::ostream *ofs) const {
     }
   }
 
-  ofs->write(reinterpret_cast<const char *>(data.data()),
+  sink->write(reinterpret_cast<const char *>(data.data()),
              static_cast<std::streamsize>(data.size()));
 
   return true;
@@ -2386,7 +2402,7 @@ bool DNGImage::WriteDataToStream(std::ostream *ofs) const {
 
 bool DNGImage::WriteIFDToStream(const unsigned int data_base_offset,
                                 const unsigned int strip_offset,
-                                std::ostream *ofs) const {
+                                const MultiEngine::Sink *sink) const {
   if ((num_fields_ == 0) || (ifd_tags_.size() < 1)) {
     err_ += "No TIFF Tags.\n";
     return false;
@@ -2457,7 +2473,7 @@ bool DNGImage::WriteIFDToStream(const unsigned int data_base_offset,
       }
     }
 
-    ofs->write(ifd_os.str().c_str(),
+    sink->write(ifd_os.str().c_str(),
                static_cast<std::streamsize>(ifd_os.str().length()));
   }
 
@@ -2471,9 +2487,12 @@ DNGWriter::DNGWriter(bool big_endian) : dng_big_endian_(big_endian) {
 }
 
 bool DNGWriter::WriteToFile(const char *filename, std::string *err) const {
-  std::ofstream ofs(filename, std::ostream::binary);
+  MultiEngine::FileSink sink{MultiEngine::File(filename)};
+  return this->WriteToFile(&sink, err);
+}
 
-  if (!ofs) {
+bool DNGWriter::WriteToFile(const MultiEngine::Sink* sink, std::string *err) const {
+  if (!sink) {
     if (err) {
       (*err) = "Failed to open file.\n";
     }
@@ -2523,13 +2542,13 @@ bool DNGWriter::WriteToFile(const char *filename, std::string *err) const {
   // std::cout << "swap endian " << swap_endian_ << std::endl;
 
   // 3. Write header
-  ofs.write(header.str().c_str(),
+  sink->write(header.str().c_str(),
             static_cast<std::streamsize>(header.str().length()));
 
   // 4. Write image and meta data
   // TODO(syoyo): Write IFD first, then image/meta data
   for (size_t i = 0; i < images_.size(); i++) {
-    bool ok = images_[i]->WriteDataToStream(&ofs);
+    bool ok = images_[i]->WriteDataToStream(sink);
     if (!ok) {
       if (err) {
         std::stringstream ss;
@@ -2544,7 +2563,7 @@ bool DNGWriter::WriteToFile(const char *filename, std::string *err) const {
   for (size_t i = 0; i < images_.size(); i++) {
     bool ok = images_[i]->WriteIFDToStream(
         static_cast<unsigned int>(data_offset_table[i]),
-        static_cast<unsigned int>(strip_offset_table[i]), &ofs);
+        static_cast<unsigned int>(strip_offset_table[i]), sink);
     if (!ok) {
       if (err) {
         std::stringstream ss;
@@ -2555,7 +2574,7 @@ bool DNGWriter::WriteToFile(const char *filename, std::string *err) const {
     }
 
     unsigned int next_ifd_offset =
-        static_cast<unsigned int>(ofs.tellp()) + sizeof(unsigned int);
+        static_cast<unsigned int>(sink->position()) + sizeof(unsigned int);
 
     if (i == (images_.size() - 1)) {
       // Write zero as IFD offset(= end of data)
@@ -2566,7 +2585,7 @@ bool DNGWriter::WriteToFile(const char *filename, std::string *err) const {
       swap4(&next_ifd_offset);
     }
 
-    ofs.write(reinterpret_cast<const char *>(&next_ifd_offset), 4);
+    sink->write(reinterpret_cast<const char *>(&next_ifd_offset), 4);
   }
 
   return true;
