@@ -4123,7 +4123,7 @@ static bool ParseTIFFIFD(const StreamReader& sr,
 
           return false;
         }
-        size_t readLen = len * sizeof(float);
+        //size_t readLen = len * sizeof(float);
 
         const size_t kMaxSamples = 1024 * 1024;
 
@@ -4196,7 +4196,7 @@ static bool ParseTIFFIFD(const StreamReader& sr,
             }
           }
 
-          if (len != (image.samples_per_pixel * 2)) {
+          if (size_t(len) != (size_t(image.samples_per_pixel) * 2)) {
             if (err) {
               (*err) += "Counts in NoisProfile must be 2 * SamplesPerPixel.\n";
             }
@@ -5931,7 +5931,7 @@ bool LoadDNGFromMemory(const char* mem, unsigned int size,
           }
           return false;
         }
-        TINY_DNG_DPRINTF("image.data.size = %lld\n", len);
+        TINY_DNG_DPRINTF("image.data.size = %u\n", uint32_t(len));
 
         image->data.resize(len);
         TINY_DNG_DPRINTF("image.data.size = %d\n", int(len));
