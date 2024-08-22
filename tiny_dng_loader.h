@@ -231,7 +231,7 @@ struct DNGImage {
   // An array of flattened the pair of input/output value.
   // [(0.0, 0.0), (0.1, 0.1), ... (1.0, 1.0)]
   // First two item must be 0.0, Last two item must be 1.0
-  std::vector<float> profile_tone_curve;  
+  std::vector<float> profile_tone_curve;
   int profile_embed_policy{-1}; // 0 = "allow copying", 1 = "embed if used", 2 = "embed never"
 
   // Noise profile
@@ -2006,7 +2006,7 @@ typedef enum {
   TAG_LIGHT_SOURCE = 0x9208, // int16u
   TAG_FLASH = 0x9209, // int16u
   TAG_FOCAL_LENGTH = 0x920a, // rational64u
-  
+
   TAG_LENS_INFO = 0xa432, // rational64u[4]
   TAG_LENS_MAKE = 0xa433, // string
   TAG_LENS_MODEL = 0xa434, // string
@@ -2483,7 +2483,7 @@ class StreamReader {
 
   bool read_rational(int type, uint32_t* ret0, uint32_t *ret1) const {
     // @todo { Support more types. }
-    
+
     if (!ret0 || !ret1) {
       return false;
     }
@@ -2508,7 +2508,7 @@ class StreamReader {
 
   bool read_srational(int type, int32_t* ret0, int32_t *ret1) const {
     // @todo { Support more types. }
-    
+
     if (!ret0 || !ret1) {
       return false;
     }
@@ -4115,7 +4115,7 @@ static bool ParseTIFFIFD(const StreamReader& sr,
         TINY_DNG_DPRINTF("tone curve datalen = %d\n", len);
 
         // len = samples * 2.
-        // It seems single channel tone curve only. 
+        // It seems single channel tone curve only.
         if ((len % 2) != 0) {
           if (err) {
             (*err) += "Invalid data size for ProfileToneCurve Tag.\n";
@@ -4180,7 +4180,7 @@ static bool ParseTIFFIFD(const StreamReader& sr,
         // or
         // DOUBLE * 2 * colorPlanes
 
-        // It seems single channel tone curve only. 
+        // It seems single channel tone curve only.
         if ((len % 2) != 0) {
           if (err) {
             (*err) += "Invalid data size for ProfileToneCurve Tag.\n";
@@ -4222,7 +4222,7 @@ static bool ParseTIFFIFD(const StreamReader& sr,
             return false;
           }
         }
-    
+
         // TODO: Validate noise profile data.
         image.noise_profile = buf;
 
@@ -5723,6 +5723,7 @@ bool LoadDNGFromMemory(const char* mem, unsigned int size,
       } else {
         // Baseline 8bit JPEG
 
+#ifndef TINY_DNG_LOADER_NO_STB_IMAGE_INCLUDE
         image->bits_per_sample_original = 8;
         image->bits_per_sample = 8;
 
@@ -5801,12 +5802,13 @@ bool LoadDNGFromMemory(const char* mem, unsigned int size,
 
         image->width = w;
         image->height = h;
+#endif
       }
-
     } else if (image->compression ==
                COMPRESSION_NEW_JPEG) {  //  new JPEG(baseline DCT JPEG or
                                         //  lossless JPEG)
 
+#ifndef TINY_DNG_LOADER_NO_STB_IMAGE_INCLUDE
       bool decoded = false;
 
       if (image->bits_per_sample_original == 8) {
@@ -5968,7 +5970,7 @@ bool LoadDNGFromMemory(const char* mem, unsigned int size,
           image->bits_per_sample_original = lj_bits;
         }
       }
-
+#endif
     } else if (image->compression == COMPRESSION_ZIP) {  // ZIP
 #ifdef TINY_DNG_LOADER_ENABLE_ZIP
       TINY_DNG_CHECK_AND_RETURN(image->bits_per_sample_original > 0,
@@ -6029,6 +6031,7 @@ bool LoadDNGFromMemory(const char* mem, unsigned int size,
 #endif
     } else if (image->compression == COMPRESSION_LOSSY) {  // lossy JPEG
 
+#ifndef TINY_DNG_LOADER_NO_STB_IMAGE_INCLUDE
       // TOOD: Check bps and photometric_interpretation.
 
       size_t jpeg_len = static_cast<size_t>(image->jpeg_byte_count);
@@ -6110,7 +6113,7 @@ bool LoadDNGFromMemory(const char* mem, unsigned int size,
 #endif
         free(decoded_image);
       }
-
+#endif
     } else if (image->compression == 34713) {  // NEF lossless?
 
       image->bits_per_sample_original = 1;  // FIXME
