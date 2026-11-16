@@ -82,6 +82,8 @@ extern "C" {
 #include <string>
 #include <vector>
 
+#include <chrono>
+
 #include "imgui.h"
 #include "imgui_impl_btgui.h"
 
@@ -94,64 +96,6 @@ int gWidth = 512;
 int gHeight = 512;
 int gMousePosX = -1, gMousePosY = -1;
 bool gMouseLeftDown = false;
-
-class timer {
- public:
-#ifdef _WIN32
-  typedef DWORD time_t;
-
-  timer() { ::timeBeginPeriod(1); }
-  ~timer() { ::timeEndPeriod(1); }
-
-  void start() { t_[0] = ::timeGetTime(); }
-  void end() { t_[1] = ::timeGetTime(); }
-
-  time_t sec() { return (time_t)((t_[1] - t_[0]) / 1000); }
-  time_t msec() { return (time_t)((t_[1] - t_[0])); }
-  time_t usec() { return (time_t)((t_[1] - t_[0]) * 1000); }
-
-#else
-#if defined(__unix__) || defined(__APPLE__)
-  typedef unsigned long int time_t;
-
-  void start() { gettimeofday(tv + 0, &tz); }
-  void end() { gettimeofday(tv + 1, &tz); }
-
-  time_t sec() { return (time_t)(tv[1].tv_sec - tv[0].tv_sec); }
-  time_t msec() {
-    return this->sec() * 1000 +
-           (time_t)((tv[1].tv_usec - tv[0].tv_usec) / 1000);
-  }
-  time_t usec() {
-    return this->sec() * 1000000 + (time_t)(tv[1].tv_usec - tv[0].tv_usec);
-  }
-
-#else  // C timer
-  // using namespace std;
-  typedef clock_t time_t;
-
-  void start() { t_[0] = clock(); }
-  void end() { t_[1] = clock(); }
-
-  time_t sec() { return (time_t)((t_[1] - t_[0]) / CLOCKS_PER_SEC); }
-  time_t msec() { return (time_t)((t_[1] - t_[0]) * 1000 / CLOCKS_PER_SEC); }
-  time_t usec() { return (time_t)((t_[1] - t_[0]) * 1000000 / CLOCKS_PER_SEC); }
-
-#endif
-#endif
-
- private:
-#ifdef _WIN32
-  DWORD t_[2];
-#else
-#if defined(__unix__) || defined(__APPLE__)
-  struct timeval tv[2];
-  struct timezone tz;
-#else
-  time_t t_[2];
-#endif
-#endif
-};
 
 typedef struct {
   int width;
@@ -348,7 +292,52 @@ void Update(RAWImage* raw, const UIParam& param) {
         }
       }
     } else {
-      std::cerr << "32bit image with INT or UINT format are not supported.\n";
+      // No gamma correction.
+      // Assume int
+      const float scale = 1.0f / 65535.0f; // fixme
+      const int *ptr = reinterpret_cast<const int *>(raw->image.data.data());
+      for (size_t i = 0; i < size_t(raw->width) * size_t(raw->height); i++) {
+        if (raw->image.samples_per_pixel == 1) {
+          buf[3 * i + 0] = float(ptr[i]) * scale;
+          buf[3 * i + 1] = float(ptr[i]) * scale;
+          buf[3 * i + 2] = float(ptr[i]) * scale;
+        } else if (raw->image.samples_per_pixel == 3) {
+          buf[3 * i + 0] = float(ptr[3 * i + 0]) * scale;
+          buf[3 * i + 1] = float(ptr[3 * i + 1]) * scale;
+          buf[3 * i + 2] = float(ptr[3 * i + 2]) * scale;
+        } else if (raw->image.samples_per_pixel == 4) {
+          buf[3 * i + 0] = float(ptr[4 * i + 0]) * scale;
+          buf[3 * i + 1] = float(ptr[4 * i + 1]) * scale;
+          buf[3 * i + 2] = float(ptr[4 * i + 2]) * scale;
+        } else {
+          assert(0);
+        }
+      }
+    }
+  } else if (raw->bits == 64) {
+    if (raw->image.sample_format == tinydng::SAMPLEFORMAT_IEEEFP) {
+      // convert to float32
+      // No gamma correction.
+      const double *ptr = reinterpret_cast<const double *>(raw->image.data.data());
+      for (size_t i = 0; i < size_t(raw->width) * size_t(raw->height); i++) {
+        if (raw->image.samples_per_pixel == 1) {
+          buf[3 * i + 0] = float(ptr[i]);
+          buf[3 * i + 1] = float(ptr[i]);
+          buf[3 * i + 2] = float(ptr[i]);
+        } else if (raw->image.samples_per_pixel == 3) {
+          buf[3 * i + 0] = float(ptr[3 * i + 0]);
+          buf[3 * i + 1] = float(ptr[3 * i + 1]);
+          buf[3 * i + 2] = float(ptr[3 * i + 2]);
+        } else if (raw->image.samples_per_pixel == 4) {
+          buf[3 * i + 0] = float(ptr[4 * i + 0]);
+          buf[3 * i + 1] = float(ptr[4 * i + 1]);
+          buf[3 * i + 2] = float(ptr[4 * i + 2]);
+        } else {
+          assert(0);
+        }
+      }
+    } else {
+      std::cerr << "64bit image with INT or UINT format are not supported.\n";
       assert(0); // @TODO
     }
   } else {
@@ -672,8 +661,16 @@ int main(int argc, char** argv) {
     std::vector<tinydng::DNGImage> images;
     std::vector<tinydng::FieldInfo> custom_fields;
 
+    auto start_t = std::chrono::system_clock::now();
+
     bool ret =
         tinydng::LoadDNG(input_filename.c_str(), custom_fields, &images, &warn, &err);
+
+    auto end_t = std::chrono::system_clock::now();
+
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end_t - start_t);
+
+    std::cout << "elapsed = " << elapsed.count() << " [ms]\n";
 
     if (!warn.empty()) {
       std::cout << "WARN: " << warn << std::endl;

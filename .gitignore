@@ -1,3 +1,7 @@
+tests/v3_test/data/psd-corpus/
+web/build/
+web/js/dist/
+
 # exclude project files
 **.sln
 **.vcxproj
