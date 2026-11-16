@@ -23,13 +23,26 @@ void main(MultiBuild::Workspace& workspace) {
 	});
 
 	properties.files({
-		"./tiny_dng_loader.h",
-		"./tiny_dng_writer.h",
-		"./*.cpp"
+		"./*.h",
+		
+		"./tinydng_api.c",
+		"./tinydng_io.c",
+		"./tinydng_tiff.c",
+		"./tinydng_dng.c",
+		"./tinydng_codec.c",
+		"./tinydng_write.c",
+		"./tinydng_psd.c",
+		"./tinydng_psd_write.c",
+
+		"./tinydng_miniz.c",
+ 		"./tinydng_stb_image.c",
+
+		"./tiny_dng_ljpeg92_v2.c"
 	});
 	
 	{
 		MultiBuild::ScopedFilter _(project, "project.compiler:VisualCpp");
 		properties.disable_warnings("4244");
+		properties.defines("_CRT_SECURE_NO_WARNINGS");
 	}
 }
